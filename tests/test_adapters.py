@@ -289,6 +289,40 @@ async def test_database_store():
             os.remove(test_db)
 
 
+async def test_mirkwood_analyst():
+    print("Testing MirkwoodAnalyst NLP-to-SQL logic (mocked API)...")
+    from adapters.analyst import MirkwoodAnalyst
+    
+    # Initialize with mock key
+    analyst = MirkwoodAnalyst(db_path="test_mirkwood.db", api_key="MOCK_KEY")
+    
+    # Mock the API response dynamically
+    def mock_call_gemini(system_prompt: str, user_prompt: str) -> str:
+        if "coordinates" in user_prompt:
+            return "SELECT * FROM emission_events WHERE latitude IS NOT NULL"
+        elif "unknown field" in user_prompt:
+            return "CANNOT_ANSWER"
+        return "SELECT COUNT(*) FROM emission_events"
+        
+    analyst._call_gemini_rest = mock_call_gemini
+    
+    # Test coordinates question
+    sql = analyst.generate_sql("Find all entries with coordinates")
+    assert sql == "SELECT * FROM emission_events WHERE latitude IS NOT NULL"
+    
+    # Test out of scope escape hatch
+    sql_cannot = analyst.generate_sql("Query an unknown field in the db")
+    assert sql_cannot == "CANNOT_ANSWER"
+    
+    # Test full pipeline logic error handling (e.g. out of scope)
+    res = analyst.query("Query an unknown field in the db")
+    assert res["success"] is False
+    assert res["sql"] is None
+    assert "cannot be answered" in res["error"]
+    
+    print("MirkwoodAnalyst OK!")
+
+
 async def main():
     print("Starting Mirkwood Adapter verification...")
     print("-" * 50)
@@ -301,6 +335,7 @@ async def main():
         await test_lte_sniffer_adapter()
         await test_rayhunter_adapter()
         await test_database_store()
+        await test_mirkwood_analyst()
         print("-" * 50)
         print("ALL TESTS PASSED SUCCESSFULLY! Normalization pipeline is 100% correct!")
     except AssertionError as e:
@@ -313,4 +348,5 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 

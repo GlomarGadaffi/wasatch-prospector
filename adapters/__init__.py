@@ -9,6 +9,7 @@ from adapters.rayhunter import RayhunterAdapter
 from adapters.mirkwood_normalizer import MirkwoodNormalizer
 from adapters.database import DatabaseStore
 from adapters.pipeline import IngestionPipeline
+from adapters.analyst import MirkwoodAnalyst
 
 __all__ = [
     "GeoPoint",
@@ -23,6 +24,8 @@ __all__ = [
     "RayhunterAdapter",
     "MirkwoodNormalizer",
     "DatabaseStore",
-    "IngestionPipeline"
+    "IngestionPipeline",
+    "MirkwoodAnalyst"
 ]
+
 
