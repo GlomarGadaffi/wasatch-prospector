@@ -44,7 +44,7 @@ Mirkwood consists of three layers:
 
 ## Core Primitive
 
-All data is normalized into a single `EmissionEvent` structure (see [`schema.md`](schema.md)).
+All data is normalized into a single `EmissionEvent` structure (see [`EmissionEvent_Schema.md`](EmissionEvent_Schema.md)).
 
 Key fields include:
 - `timestamp`, `location`, `channel_type`
@@ -73,3 +73,25 @@ Primarily intended for:
 - Preparedness / SIGINT education
 
 ## Repository Structure
+
+```text
+├── adapters/                  # Normalization pipeline adapters
+│   ├── __init__.py            # Clean exports for Mirkwood Normalizer package
+│   ├── base.py                # Core interfaces (EmissionEvent, NormalizationAdapter)
+│   ├── bcd325p2.py            # BearSentinel adapter (P25 / EDACS Trunked Radio)
+│   ├── lte_sniffer.py         # LTESniffer adapter (LTE Control Plane)
+│   ├── meshnarc.py            # MeshNarc adapter (LoRa Mesh/Meshtastic)
+│   ├── mirkwood_normalizer.py # Main normalization router
+│   ├── pocket_dial.py         # Pocket-dial adapter (VoIP SIP PBX)
+│   ├── rayhunter.py           # Rayhunter adapter (Rogue cell detector / IMSI Catcher)
+│   ├── rfparty.py             # rfparty adapter (BLE telemetry)
+│   └── wardriver.py           # wardriver_rev3 adapter (WiFi + Bluetooth)
+├── tests/                     # Validation suite
+│   └── test_adapters.py       # Standalone test runner for normalization and fingerprinting
+├── DISCLAIMER.md              # Project boundaries, false-positive stating, ethical considerations
+├── EmissionEvent_Schema.md    # Unified DB schema definition
+├── architecture.md            # In-depth architectural design decisions
+├── mirkwood.png               # System architecture visual diagram
+├── requirements.txt           # Package dependencies
+└── README.md                  # Project overview and introduction
+```
