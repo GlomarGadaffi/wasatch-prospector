@@ -1,0 +1,62 @@
+# Mirkwood Normalization Adapters
+
+Unified adapter interface and implementations for all tools in the Mirkwood ecosystem.
+
+## Core Interface
+
+```python
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Dict, Any, List, Optional, Protocol
+from uuid import UUID, uuid4
+import hashlib
+
+
+@dataclass
+class GeoPoint:
+    lat: Optional[float] = None
+    lon: Optional[float] = None
+    accuracy_m: Optional[float] = None
+    source: str = "unknown"
+
+
+@dataclass
+class EmissionEvent:
+    event_id: UUID
+    timestamp: datetime
+    latitude: Optional[float]
+    longitude: Optional[float]
+    accuracy_m: Optional[float]
+    location_source: str
+
+    channel_type: str
+    source_tool: str
+
+    primary_id: Optional[str]
+    secondary_ids: List[str]
+    device_fingerprint: Optional[str]
+
+    metadata: Dict[str, Any]
+    observed_duration: Optional[str]      # ISO 8601 or None
+    session_id: Optional[str]
+
+    tags: List[str]
+    enrichment: Dict[str, Any]
+
+
+class NormalizationAdapter(Protocol):
+    """All Mirkwood adapters must implement this interface."""
+
+    @property
+    def channel_type(self) -> str: ...
+
+    @property
+    def source_tool(self) -> str: ...
+
+    def normalize(self, raw: Any) -> List[EmissionEvent]:
+        """Convert raw tool output into normalized EmissionEvent(s)."""
+        ...
+
+    def generate_fingerprint(self, event: EmissionEvent) -> str:
+        """Generate stable cross-channel device fingerprint."""
+        ...
