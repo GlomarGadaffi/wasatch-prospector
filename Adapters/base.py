@@ -1,10 +1,3 @@
-# Mirkwood Normalization Adapters
-
-Unified adapter interface and implementations for all tools in the Mirkwood ecosystem.
-
-## Core Interface
-
-```python
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Dict, Any, List, Optional, Protocol
