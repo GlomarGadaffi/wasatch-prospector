@@ -26,9 +26,10 @@ All **public artifacts are strictly synthetic**. No real captures are provided o
 
 Mirkwood consists of three layers:
 
-1. **Capture Layer** — Your existing tools (independent repos)
-2. **Ingestion Layer** — Unified `EmissionEvent` normalization
-3. **Analysis Layer** — Simple natural-language-to-SQL analyst with full schema-in-prompt
+1. **Capture Layer** — Independent sensor nodes (mapped inside [`INTEGRATION_MAP.md`](INTEGRATION_MAP.md))
+2. **Ingestion Layer** — Headless `DatabaseStore` and `IngestionPipeline` daemon supporting directory watching, TCP streaming ports, and piped input streams.
+3. **Analysis Layer** — Offline-first `MirkwoodAnalyst` translating natural language queries to safe, read-only SQLite SELECT queries with standard ASCII terminal rendering.
+
 
 ### Integrated Tools
 
