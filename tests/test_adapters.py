@@ -241,6 +241,54 @@ async def test_rayhunter_adapter():
     print("RayhunterAdapter OK!")
 
 
+async def test_database_store():
+    print("Testing DatabaseStore integration...")
+    from adapters.database import DatabaseStore
+    from adapters.bcd325p2 import BearSentinelAdapter
+    
+    test_db = "test_mirkwood.db"
+    if os.path.exists(test_db):
+        os.remove(test_db)
+        
+    try:
+        db = DatabaseStore(test_db)
+        
+        # Standard BearSentinel event
+        normalizer = MirkwoodNormalizer()
+        raw_data = {
+            "timestamp": to_datetime("2026-06-01T03:00:00Z"),
+            "lat": 42.1234,
+            "lon": -71.4567,
+            "unit_id": 12345,
+            "talkgroup_id": 999,
+            "grant_type": "grant",
+            "call_id": "call-100"
+        }
+        
+        events = await normalizer.process("BearSentinel", raw_data)
+        assert len(events) == 1
+        
+        # Batch insert
+        rows_inserted = db.insert_events(events)
+        assert rows_inserted == 1
+        
+        # Fetch back
+        recent = db.get_recent_events(limit=5)
+        assert len(recent) == 1
+        record = recent[0]
+        
+        assert record["source_tool"] == "BearSentinel"
+        assert record["channel_type"] == "P25_TRUNK"
+        assert record["primary_id"] == "12345"
+        assert record["session_id"] == "call-100"
+        assert float(record["latitude"]) == 42.1234
+        
+        print("DatabaseStore OK!")
+    finally:
+        if os.path.exists(test_db):
+            os.remove(test_db)
+
+
 async def main():
     print("Starting Mirkwood Adapter verification...")
     print("-" * 50)
@@ -252,6 +300,7 @@ async def main():
         await test_pocket_dial_adapter()
         await test_lte_sniffer_adapter()
         await test_rayhunter_adapter()
+        await test_database_store()
         print("-" * 50)
         print("ALL TESTS PASSED SUCCESSFULLY! Normalization pipeline is 100% correct!")
     except AssertionError as e:
@@ -264,3 +313,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+

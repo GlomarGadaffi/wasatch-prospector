@@ -18,3 +18,7 @@ env/
 *.swo
 .DS_Store
 Thumbs.db
+
+# Ingestion outputs and logs
+*.log
+*.db
