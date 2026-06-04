@@ -30,8 +30,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger("mirkwood.pipeline")
 
-# Graceful shutdown flag
-shutdown_event = asyncio.Event()
+# Graceful shutdown flag — created inside main() to bind to the running event loop.
+shutdown_event: asyncio.Event = None  # type: ignore[assignment]
 
 
 def signal_handler(sig, frame):
@@ -72,18 +72,25 @@ class IngestionPipeline:
     async def start_directory_watcher(self, interval_seconds: float = 2.0):
         """Headless loop that watches folders for new raw JSON uploads."""
         logger.info(f"Directory Watcher started. Monitoring folder: {os.path.abspath(self.incoming_dir)}")
-        
+        real_incoming = os.path.realpath(self.incoming_dir)
+
         while not shutdown_event.is_set():
             try:
                 # Expect subdirectories or direct json files per tool: e.g. data/incoming/MeshNarc/*.json
                 for file_name in os.listdir(self.incoming_dir):
                     file_path = os.path.join(self.incoming_dir, file_name)
-                    
+
+                    # Block symlink traversal: ensure the resolved path stays under incoming_dir.
+                    real_path = os.path.realpath(file_path)
+                    if not real_path.startswith(real_incoming + os.sep):
+                        logger.error(f"Path traversal blocked: {file_path}")
+                        continue
+
                     if not os.path.isfile(file_path) or not file_name.endswith('.json'):
                         continue
-                    
+
                     logger.info(f"Detected incoming file: {file_name}")
-                    
+
                     try:
                         with open(file_path, "r", encoding="utf-8") as f:
                             data = json.load(f)
@@ -97,7 +104,7 @@ class IngestionPipeline:
                             inserted = await self.ingest_payload(source_tool, payload)
                             if inserted > 0:
                                 # Archive file on success
-                                archive_path = os.path.join(self.archive_dir, f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{file_name}")
+                                archive_path = os.path.join(self.archive_dir, f"{datetime.now().strftime('%Y%m%d%H%M%S%f')}_{file_name}")
                                 shutil.move(file_path, archive_path)
                                 logger.info(f"File archived to: {archive_path}")
                         else:
@@ -115,55 +122,65 @@ class IngestionPipeline:
 
     async def start_socket_server(self, host: str = "127.0.0.1", port: int = 8900):
         """Headless socket listener that acts as a real-time TCP ingestion server."""
+        _MAX_CONNECTIONS = 50
+        _MAX_BUFFER_BYTES = 1 * 1024 * 1024  # 1 MB per connection
+        semaphore = asyncio.Semaphore(_MAX_CONNECTIONS)
+
         server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         server.setblocking(False)
-        
+
         try:
             server.bind((host, port))
             server.listen(10)
             logger.info(f"Ingestion TCP server listening on tcp://{host}:{port}")
         except Exception as e:
             logger.critical(f"Failed to bind socket server to {host}:{port}: {e}")
+            server.close()
             return
 
         loop = asyncio.get_event_loop()
-        
+
         async def handle_client(reader, writer):
             peer = writer.get_extra_info('peername')
-            logger.info(f"Connection accepted from client: {peer}")
-            buffer = ""
-            
-            try:
-                while not shutdown_event.is_set():
-                    data = await reader.read(4096)
-                    if not data:
-                        break
-                    
-                    buffer += data.decode('utf-8')
-                    # Expect newline terminated JSON payloads (JSON Lines format)
-                    while "\n" in buffer:
-                        line, buffer = buffer.split("\n", 1)
-                        line = line.strip()
-                        if not line:
-                            continue
-                        
-                        try:
-                            payload_obj = json.loads(line)
-                            source_tool = payload_obj.get("source_tool")
-                            payload = payload_obj.get("payload")
-                            
-                            if source_tool and payload is not None:
-                                await self.ingest_payload(source_tool, payload)
-                            else:
-                                logger.warning(f"TCP client sent invalid payload format: '{line}'")
-                        except json.JSONDecodeError:
-                            logger.error(f"TCP client sent invalid JSON packet: '{line}'")
-            except Exception as e:
-                logger.error(f"TCP socket handler error: {e}")
-            finally:
-                writer.close()
-                logger.info(f"Connection closed for client: {peer}")
+            async with semaphore:
+                logger.info(f"Connection accepted from client: {peer}")
+                buffer = ""
+
+                try:
+                    while not shutdown_event.is_set():
+                        data = await reader.read(4096)
+                        if not data:
+                            break
+
+                        buffer += data.decode('utf-8', errors='replace')
+                        if len(buffer) > _MAX_BUFFER_BYTES:
+                            logger.warning(f"Buffer limit exceeded from {peer}, closing connection.")
+                            break
+
+                        # Expect newline terminated JSON payloads (JSON Lines format)
+                        while "\n" in buffer:
+                            line, buffer = buffer.split("\n", 1)
+                            line = line.strip()
+                            if not line:
+                                continue
+
+                            try:
+                                payload_obj = json.loads(line)
+                                source_tool = payload_obj.get("source_tool")
+                                payload = payload_obj.get("payload")
+
+                                if source_tool and payload is not None:
+                                    await self.ingest_payload(source_tool, payload)
+                                else:
+                                    logger.warning(f"TCP client sent invalid payload format (length={len(line)})")
+                            except json.JSONDecodeError:
+                                logger.error(f"TCP client sent invalid JSON (length={len(line)})")
+                except Exception as e:
+                    logger.error(f"TCP socket handler error: {e}")
+                finally:
+                    writer.close()
+                    logger.info(f"Connection closed for client: {peer}")
 
         async def accept_connections():
             while not shutdown_event.is_set():
@@ -177,19 +194,23 @@ class IngestionPipeline:
                     logger.error(f"Socket accept error: {e}")
                     await asyncio.sleep(0.5)
 
-        accept_task = asyncio.create_task(accept_connections())
-        await shutdown_event.wait()
-        
-        # Cleanup
-        accept_task.cancel()
-        server.close()
-        logger.info("TCP socket server shutdown complete.")
+        try:
+            accept_task = asyncio.create_task(accept_connections())
+            await shutdown_event.wait()
+            accept_task.cancel()
+        finally:
+            server.close()
+            logger.info("TCP socket server shutdown complete.")
 
     async def start_stdin_reader(self):
         """Allows direct terminal pipelining of JSON streams."""
+        if not hasattr(os, 'set_blocking'):
+            logger.warning("--stdin mode requires os.set_blocking which is unavailable on Windows. STDIN reader disabled.")
+            return
+
         logger.info("STDIN listener active. Pipeline is reading from standard input stream...")
         loop = asyncio.get_event_loop()
-        
+
         # Set stdin non-blocking
         os.set_blocking(sys.stdin.fileno(), False)
         
@@ -241,9 +262,12 @@ async def main():
         db = DatabaseStore(args.db)
         events = db.get_recent_events(5)
         conn = db._get_connection()
-        total_count = conn.execute("SELECT count(*) FROM emission_events").fetchone()[0]
-        tools_summary = conn.execute("SELECT source_tool, count(*) FROM emission_events GROUP BY source_tool").fetchall()
-        
+        try:
+            total_count = conn.execute("SELECT count(*) FROM emission_events").fetchone()[0]
+            tools_summary = conn.execute("SELECT source_tool, count(*) FROM emission_events GROUP BY source_tool").fetchall()
+        finally:
+            conn.close()
+
         print("-" * 60)
         print(f"MIRKWOOD DATABASE STATISTICS ({os.path.abspath(args.db)})")
         print("-" * 60)
@@ -251,12 +275,16 @@ async def main():
         print("\nEvents per Ingested Tool:")
         for row in tools_summary:
             print(f" - {row[0]}: {row[1]} events")
-        
+
         print("\nLast 5 Ingested Events:")
         for idx, event in enumerate(events, 1):
             print(f" {idx}. [{event['timestamp']}] {event['source_tool']} ({event['channel_type']}) | ID: {event['primary_id']}")
         print("-" * 60)
         return
+
+    # Create the shutdown event inside the running loop (safe for re-entry in tests).
+    global shutdown_event
+    shutdown_event = asyncio.Event()
 
     # Setup signal handlers for standard POSIX environments (Graceful shutdown)
     for sig in (signal.SIGINT, signal.SIGTERM):

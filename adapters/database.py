@@ -3,7 +3,7 @@ import json
 import sqlite3
 import uuid
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional
 from adapters.base import EmissionEvent
 
@@ -84,7 +84,7 @@ class DatabaseStore:
         for e in events:
             # Format timestamps to ISO strings
             ts_str = e.timestamp.isoformat() if isinstance(e.timestamp, datetime) else str(e.timestamp)
-            ingest_ts_str = datetime.utcnow().isoformat()
+            ingest_ts_str = datetime.now(timezone.utc).isoformat()
 
             records.append((
                 str(e.event_id),
@@ -107,15 +107,15 @@ class DatabaseStore:
                 json.dumps(e.enrichment)
             ))
 
+        row_count = len(records)
         conn = self._get_connection()
         try:
             cursor = conn.cursor()
             cursor.executemany(query, records)
             conn.commit()
-            row_count = cursor.rowcount
         finally:
             conn.close()
-            
+
         logger.debug(f"Successfully inserted {row_count} events into database.")
         return row_count
 

@@ -52,9 +52,12 @@ COLUMNS:
             raise ValueError("Missing Gemini API Key. Please set the GEMINI_API_KEY or GOOGLE_API_KEY environment variable.")
 
         # We use gemini-2.5-flash as the standard, high-performance model
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={self.api_key}"
-        
-        headers = {"Content-Type": "application/json"}
+        url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
+
+        headers = {
+            "Content-Type": "application/json",
+            "X-Goog-Api-Key": self.api_key,
+        }
         
         # Structure the payload in standard Google AI Developer API format
         payload = {
@@ -85,12 +88,14 @@ COLUMNS:
                 # Extract text from standard response structure
                 candidates = resp_data.get("candidates", [])
                 if candidates:
-                    text = candidates[0].get("content", {}).get("parts", [])[0].get("text", "")
-                    return text.strip()
+                    parts = candidates[0].get("content", {}).get("parts", [])
+                    if not parts:
+                        raise ValueError("Gemini API returned a candidate with no parts (likely safety-filtered).")
+                    return parts[0].get("text", "").strip()
                 raise ValueError("Empty response received from Gemini API.")
         except urllib.error.HTTPError as e:
             error_body = e.read().decode("utf-8")
-            raise RuntimeError(f"Gemini API request failed: {e.code} - {error_body}")
+            raise RuntimeError(f"Gemini API request failed with status {e.code}: {error_body}")
         except Exception as e:
             raise RuntimeError(f"Connection to Gemini API failed: {e}")
 
@@ -151,11 +156,12 @@ Now translate the user's question.
             }
             
         logger.info(f"Generated SQL Query: {sql}")
-        
-        # Safety enforcement: ensure it is a SELECT statement
+
+        # First-pass guard: reject obvious non-SELECT statements before hitting the DB.
+        # Real enforcement is the read-only connection below; this is defence-in-depth only.
         sql_stripped = sql.strip().upper()
-        if not sql_stripped.startswith("SELECT"):
-            logger.error(f"Safety violation: generated non-SELECT statement: '{sql}'")
+        if not sql_stripped.startswith("SELECT") and not sql_stripped.startswith("WITH"):
+            logger.error(f"Safety violation: generated non-SELECT statement.")
             return {
                 "question": question,
                 "sql": sql,
@@ -164,7 +170,21 @@ Now translate the user's question.
                 "results": []
             }
 
-        conn = self.db._get_connection()
+        # Open a read-only connection so the SQLite engine itself enforces no writes,
+        # regardless of CTE tricks, PRAGMA writes, or ATTACH attempts.
+        try:
+            conn = sqlite3.connect(f"file:{self.db_path}?mode=ro", uri=True)
+            conn.row_factory = sqlite3.Row
+        except Exception as e:
+            logger.error(f"Failed to open read-only DB connection: {e}")
+            return {
+                "question": question,
+                "sql": sql,
+                "success": False,
+                "error": f"Database connection error: {e}",
+                "results": []
+            }
+
         try:
             cursor = conn.cursor()
             cursor.execute(sql)

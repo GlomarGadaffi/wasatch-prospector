@@ -26,7 +26,16 @@ class WardriverAdapter(NormalizationAdapter):
                 primary_id=str(r.get('bssid')) if r.get('bssid') is not None else (str(r.get('mac')) if r.get('mac') is not None else None),
                 secondary_ids=[],
                 device_fingerprint=None,
-                metadata=r,   # Store full record
+                metadata={
+                    "type": r.get("type"),
+                    "ssid": r.get("ssid"),
+                    "bssid": r.get("bssid"),
+                    "mac": r.get("mac"),
+                    "rssi": r.get("rssi"),
+                    "vendor": r.get("vendor"),
+                    "channel": r.get("channel"),
+                    "encryption": r.get("encryption"),
+                },
                 observed_duration=None,
                 session_id=None,
                 tags=["wifi"] if ct == "WIFI" else ["bluetooth"],
