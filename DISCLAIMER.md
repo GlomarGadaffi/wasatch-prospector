@@ -42,7 +42,7 @@ Use as a predicate for doxxing, harassment, stalking, confrontation, interferenc
 
 Cross-modal correlation against unhardened emissions produces loose matches at a rate that is not intuitive. A BLE hash that stays within 80 meters of a radio logical ID across several transitions is a hypothesis worth investigating under lawful process. It is not proof of identity. It is not proof of affiliation. It is not proof of presence. Anyone who treats it as proof is going to hurt someone who is not the target, and the tool's interface will not stop them, because the interface is designed to surface candidates, not to adjudicate them.
 
-This is the operational risk that matters most and the one most actively disguised by the apparent precision of the output.
+This is the operational risk that matters most and the one most actively disguised by the apparent precision of the output. The evidentiary consequences of ignoring it — including the mechanism by which treating a lock as proof gets guilty defendants acquitted — are set out in [`EVIDENTIARY.md`](EVIDENTIARY.md).
 
 ## The case you are already thinking of
 

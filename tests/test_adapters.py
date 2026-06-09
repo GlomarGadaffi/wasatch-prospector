@@ -323,6 +323,43 @@ async def test_mirkwood_analyst():
     print("MirkwoodAnalyst OK!")
 
 
+async def test_epistemic_classifier():
+    print("Testing epistemic classification of query results...")
+    from adapters.analyst import classify_epistemic_status
+
+    # A single-table read is an OBSERVATION (still not an identity, but not a lock).
+    obs = classify_epistemic_status(
+        "SELECT * FROM emission_events WHERE channel_type = 'BLE' LIMIT 100"
+    )
+    assert obs is not None
+    assert obs["status"] == "OBSERVATION"
+    assert obs["is_evidence"] is False
+
+    # A self-join correlation is a CO-PRESENCE HYPOTHESIS, never an identification.
+    corr = classify_epistemic_status(
+        "SELECT a.primary_id, b.primary_id FROM emission_events a "
+        "JOIN emission_events b ON a.device_fingerprint = b.device_fingerprint "
+        "AND a.channel_type != b.channel_type"
+    )
+    assert corr["status"] == "CORRELATION_HYPOTHESIS"
+    assert corr["is_evidence"] is False
+
+    # An explicit JOIN keyword alone is enough to flag correlation.
+    corr2 = classify_epistemic_status(
+        "SELECT * FROM emission_events a JOIN emission_events b USING (device_fingerprint)"
+    )
+    assert corr2["status"] == "CORRELATION_HYPOTHESIS"
+
+    # No SQL (CANNOT_ANSWER path) yields no classification.
+    assert classify_epistemic_status(None) is None
+    assert classify_epistemic_status("") is None
+
+    # Every classified result must carry the evidentiary reference.
+    assert obs["reference"] == "EVIDENTIARY.md"
+    assert corr["reference"] == "EVIDENTIARY.md"
+    print("EpistemicClassifier OK!")
+
+
 async def main():
     print("Starting Mirkwood Adapter verification...")
     print("-" * 50)
@@ -336,6 +373,7 @@ async def main():
         await test_rayhunter_adapter()
         await test_database_store()
         await test_mirkwood_analyst()
+        await test_epistemic_classifier()
         print("-" * 50)
         print("ALL TESTS PASSED SUCCESSFULLY! Normalization pipeline is 100% correct!")
     except AssertionError as e:

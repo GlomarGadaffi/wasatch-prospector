@@ -11,6 +11,42 @@ logging.basicConfig(
 )
 
 
+def print_epistemic_banner(epistemic: dict):
+    """Render the epistemic classification ABOVE the rows.
+
+    The whole point of EVIDENTIARY.md is that the caveat must not be skippable.
+    A consumer who reads only the terminal output still has to scroll past this
+    to reach a single row, so a hypothesis can never be screenshotted as a fact
+    without its classification attached.
+    """
+    if not epistemic:
+        return
+
+    status = epistemic.get("status", "UNCLASSIFIED")
+    classification = epistemic.get("classification", "")
+    caveat = epistemic.get("caveat", "")
+    reference = epistemic.get("reference", "")
+
+    bar = "=" * 70
+    print("\n" + bar)
+    print(f"  {classification}")
+    print(f"  result class: {status}    is_evidence: {epistemic.get('is_evidence', False)}")
+    print(bar)
+    # Wrap the caveat to the banner width so it stays readable in a terminal.
+    words = caveat.split()
+    line = "  "
+    for w in words:
+        if len(line) + len(w) + 1 > 68:
+            print(line)
+            line = "  "
+        line += (w + " ")
+    if line.strip():
+        print(line)
+    if reference:
+        print(f"\n  Basis and limits: {reference}")
+    print(bar)
+
+
 def print_table(results: list):
     """Gorgeously prints structured rows in a clean ASCII terminal format."""
     if not results:
@@ -78,6 +114,7 @@ def main():
             sys.exit(1)
             
         print(f"SQL GENERATED:\n  {res['sql']}")
+        print_epistemic_banner(res.get("epistemic"))
         print("\nQUERY RESULTS:")
         print_table(res["results"])
         

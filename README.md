@@ -5,7 +5,7 @@
 
 A synthetic research platform demonstrating cross-channel pseudonymity collapse through passive RF observation.
 
-**All data feeding the published pipeline is strictly synthetic.** The capture hardware bill of materials, firmware, frequencies, and calibration data are withheld. See [`DISCLAIMER.md`](DISCLAIMER.md) for scope boundaries and prohibited uses.
+**All data feeding the published pipeline is strictly synthetic.** The capture hardware bill of materials, firmware, frequencies, and calibration data are withheld. See [`DISCLAIMER.md`](DISCLAIMER.md) for scope boundaries and prohibited uses, and [`EVIDENTIARY.md`](EVIDENTIARY.md) for what an output is and is not as a matter of evidence — read it before treating any correlation as more than a lead.
 
 ---
 
@@ -122,7 +122,7 @@ JOIN   emission_events b
 LIMIT  100;
 ```
 
-A device appearing on two channels within a 5-minute window at the same location is a **co-presence hypothesis**, not an identity confirmation. The distinction matters under the false positive problem below.
+A device appearing on two channels within a 5-minute window at the same location is a **co-presence hypothesis**, not an identity confirmation. The distinction matters under the false positive problem below — and it is now carried in the output itself: every analyst result is tagged `CORRELATION_HYPOTHESIS` or `OBSERVATION`, flagged `is_evidence: false`, and pinned to [`EVIDENTIARY.md`](EVIDENTIARY.md).
 
 ### EDACS Talkgroup Metadata
 
@@ -284,6 +284,7 @@ The ingestion pipeline, all seven adapters, the database layer, and the analyst 
 ## See Also
 
 - [`DISCLAIMER.md`](DISCLAIMER.md) — false positive problem stated plainly, bidirectionality, prohibited uses
+- [`EVIDENTIARY.md`](EVIDENTIARY.md) — evidentiary standing: co-presence vs identification, base rates, why treating a lock as proof gets the guilty acquitted, forgeability, and the bright lines for investigators/prosecutors/courts
 - [`architecture.md`](architecture.md) — layer design decisions and rejected alternatives
 - [`EmissionEvent_Schema.md`](EmissionEvent_Schema.md) — full schema with field descriptions
 - [Mirkwood Wiki](https://github.com/GlomarGadaffi/Mirkwood/wiki) — adapter docs, query examples, security hardening, SENTINEL-NODE

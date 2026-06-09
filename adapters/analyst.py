@@ -11,6 +11,63 @@ from adapters.database import DatabaseStore
 logger = logging.getLogger("mirkwood.analyst")
 
 
+def classify_epistemic_status(sql: Optional[str]) -> Optional[Dict[str, Any]]:
+    """Classify the epistemic standing of a generated query's result set.
+
+    This is the structural counterpart to EVIDENTIARY.md: the honesty about what
+    Mirkwood output *is* must travel WITH the output, not live only in a document
+    a reader can skip. Every result the analyst returns is tagged, and the tag is
+    rendered above the rows by the CLI so no consumer can mistake a hypothesis for
+    a fact.
+
+    Two tiers:
+      * CORRELATION_HYPOTHESIS — the query correlates across rows (a self-join, an
+        explicit JOIN, or any cross-row pairing on device_fingerprint / channel /
+        spatiotemporal window). Each output row is a CO-PRESENCE HYPOTHESIS. Under
+        realistic device density these are dominated by coincidence (see the base
+        rate in EVIDENTIARY.md). NEVER an identification.
+      * OBSERVATION — a single-table read of raw emissions. A record of what was
+        received on the wire. A pseudonym is not a person.
+
+    Neither tier is evidence of identity. `is_evidence` is always False.
+    Returns None when there is no SQL to classify (e.g. CANNOT_ANSWER).
+    """
+    if not sql:
+        return None
+
+    s = " ".join(sql.upper().split())
+    table_refs = s.count("EMISSION_EVENTS")
+    correlates = (" JOIN " in s) or (table_refs >= 2)
+
+    if correlates:
+        status = "CORRELATION_HYPOTHESIS"
+        caveat = (
+            "This result set was produced by a cross-channel / spatiotemporal "
+            "correlation. Each row pairs pseudonyms that share a fingerprint or a "
+            "location-time window. That is a CO-PRESENCE HYPOTHESIS, not an "
+            "identification of any person. Under realistic device density the "
+            "false-positive rate is high. Treat every row as a lead to be "
+            "independently verified under lawful process -- never as proof of "
+            "identity, affiliation, or presence."
+        )
+    else:
+        status = "OBSERVATION"
+        caveat = (
+            "This result set reports raw observed emissions (per-channel "
+            "pseudonyms, locations, timestamps). An observation is a record of "
+            "what was received on the wire, NOT an attribution to a named person. "
+            "A pseudonym is not an identity."
+        )
+
+    return {
+        "status": status,
+        "is_evidence": False,
+        "classification": "INVESTIGATIVE LEAD -- NOT EVIDENCE OF IDENTITY",
+        "caveat": caveat,
+        "reference": "EVIDENTIARY.md",
+    }
+
+
 class MirkwoodAnalyst:
     """Headless AI Analyst for Mirkwood. Converts natural language to SQLite queries
     using Gemini, executes them, and returns structured results.
@@ -19,6 +76,7 @@ class MirkwoodAnalyst:
 
     def __init__(self, db_path: str = "mirkwood.db", api_key: Optional[str] = None):
         self.db = DatabaseStore(db_path)
+        self.db_path = db_path  # query() opens its own read-only connection against this path
         self.api_key = api_key or os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
 
     def _get_schema_prompt(self) -> str:
@@ -152,7 +210,8 @@ Now translate the user's question.
                 "sql": None,
                 "success": False,
                 "error": "The question is out of scope or cannot be answered using the emission_events schema.",
-                "results": []
+                "results": [],
+                "epistemic": None
             }
             
         logger.info(f"Generated SQL Query: {sql}")
@@ -167,7 +226,8 @@ Now translate the user's question.
                 "sql": sql,
                 "success": False,
                 "error": "Security check failed: Only read-only SELECT statements are permitted.",
-                "results": []
+                "results": [],
+                "epistemic": None
             }
 
         # Open a read-only connection so the SQLite engine itself enforces no writes,
@@ -182,7 +242,8 @@ Now translate the user's question.
                 "sql": sql,
                 "success": False,
                 "error": f"Database connection error: {e}",
-                "results": []
+                "results": [],
+                "epistemic": None
             }
 
         try:
@@ -196,7 +257,8 @@ Now translate the user's question.
                 "sql": sql,
                 "success": True,
                 "error": None,
-                "results": results
+                "results": results,
+                "epistemic": classify_epistemic_status(sql)
             }
         except Exception as e:
             logger.error(f"SQL execution failed: {e}")
@@ -205,7 +267,8 @@ Now translate the user's question.
                 "sql": sql,
                 "success": False,
                 "error": f"Database execution error: {e}",
-                "results": []
+                "results": [],
+                "epistemic": classify_epistemic_status(sql)
             }
         finally:
             conn.close()
