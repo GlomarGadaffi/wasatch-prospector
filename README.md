@@ -1,10 +1,10 @@
-# wasatch-prospector
+# deanon-demo
 
 demonstrates what ~$900 of commodity hardware can reconstruct about targets that multi-channel pseudonymity was supposed to protect. synthetic data only. built for accountability research — shows information asymmetries in RF privacy assumptions.
 
 ## threat model
 
-targets believe multi-channel hopping / call signing / talkgroup rotation provide operational security. wasatch-prospector shows third-order inference:
+targets believe multi-channel hopping / call signing / talkgroup rotation provide operational security. deanon-demo shows third-order inference:
 
 1. **frequency association**: repeated presence on band X at time T
 2. **temporal fingerprinting**: call duration patterns, inter-call intervals, shift schedules
